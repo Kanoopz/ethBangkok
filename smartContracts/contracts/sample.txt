@@ -1,0 +1,51 @@
+/**
+ * @notice Constructs a command to query the Uniswap QuoterV2 for WETH/USDC prices on all configured chains.
+ * @return cmd The encoded command to request Uniswap quotes.
+ */
+function getCmd() public view returns (bytes memory) {
+    uint256 pairCount = targetEids.length;
+    EVMCallRequestV1[] memory readRequests = new EVMCallRequestV1[](pairCount);
+
+    for (uint256 i = 0; i < pairCount; i++) {
+        uint32 targetEid = targetEids[i];
+        ChainConfig memory config = chainConfigs[targetEid];    ///Q?: CHAIN CONFIG IS A GLOBAL MAPPING OR ONE DEFINED ON THE EXAMPLE  ///
+
+        // Define the QuoteExactInputSingleParams
+        IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2.QuoteExactInputSingleParams({   ///Q?:THIS IS THE FUNCTION SIGNATURE OF UNISWAP, HOW WOULD IT BE FOR A SIMPLE GET FUNC ///
+            tokenIn: config.tokenInAddress,
+            tokenOut: config.tokenOutAddress,
+            amountIn: 1 ether, // amountIn: 1 WETH
+            fee: config.fee,
+            sqrtPriceLimitX96: 0 // No price limit
+        });
+
+        // @notice Encode the function call
+        // @dev From Uniswap Docs, this function is not marked view because it relies on calling non-view
+        // functions and reverting to compute the result. It is also not gas efficient and should not
+        // be called on-chain. We take advantage of lzRead to call this function off-chain and get the result
+        // returned back on-chain to the OApp's _lzReceive method.
+        // https://docs.uniswap.org/contracts/v3/reference/periphery/interfaces/IQuoterV2
+        bytes memory callData = abi.encodeWithSelector(IQuoterV2.quoteExactInputSingle.selector, params);
+
+        readRequests[i] = EVMCallRequestV1({
+            appRequestLabel: uint16(i + 1),     //  Q?: WHAT IS APP REQUEST LABEL?  ///
+            targetEid: targetEid,
+            isBlockNum: false,
+            blockNumOrTimestamp: uint64(block.timestamp),
+            confirmations: config.confirmations,
+            to: config.quoterAddress,
+            callData: callData
+        });
+    }
+
+    EVMCallComputeV1 memory computeSettings = EVMCallComputeV1({
+        computeSetting: 2, // lzMap() and lzReduce()
+        targetEid: ILayerZeroEndpointV2(endpoint).eid(),
+        isBlockNum: false,
+        blockNumOrTimestamp: uint64(block.timestamp),
+        confirmations: 15,
+        to: address(this)
+    });
+
+    return ReadCodecV1.encode(0, readRequests, computeSettings);
+}

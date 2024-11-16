@@ -1,0 +1,10 @@
+{
+  "name": "hardhat-project",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.15"
+  },
+  "dependencies": {
+    "@layerzerolabs/oapp-evm": "^0.2.0"
+  }
+}
